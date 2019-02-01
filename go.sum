@@ -1,0 +1,8 @@
+github.com/adlio/trello v0.0.0-20181009211147-e4cc07c871d0 h1:mI+BqWX9HJIRw68D6yUBunwIHs6oJkqqwFKEogkHKkk=
+github.com/adlio/trello v0.0.0-20181009211147-e4cc07c871d0/go.mod h1:VjzhFGdnEJGih1AsIWi/yU6y01yZh0DuEWCNAyOJ1WE=
+github.com/kelseyhightower/envconfig v1.3.0 h1:IvRS4f2VcIQy6j4ORGIf9145T/AsUB+oY8LyvN8BXNM=
+github.com/kelseyhightower/envconfig v1.3.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
+github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
+github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+github.com/rs/zerolog v1.11.0 h1:DRuq/S+4k52uJzBQciUcofXx45GrMC6yrEbb/CoK6+M=
+github.com/rs/zerolog v1.11.0/go.mod h1:YbFCdg8HfsridGWAh22vktObvhZbQsZXe4/zB0OKkWU=
