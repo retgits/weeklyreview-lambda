@@ -1,76 +1,81 @@
+# -----------------------------------------------------------------------------
 # Description: Makefile
-# Author: retgits
-# Last Updated: 2019-01-31
+# Author(s): retgits <https://github.com/retgits/>
+# Last updated: 2019-09-10
+# 
+# This software may be modified and distributed under the terms of the
+# MIT license. See the LICENSE file for details.
+# -----------------------------------------------------------------------------
 
-#--- Variables ---
-## The name of the user for Docker
-DOCKERUSER=retgits
-## Get the name of the project
-PROJECT=weekly-review
-## Set a default test directory
-TESTDIR=$(CURDIR)/test
-## Create a list of all packages in this repository
-PACKAGES=$(shell go list ./... | grep -v "vendor")
+## The stage to deploy to
+stage         := dev
 
-#--- Help ---
-.PHONY: help
-help: ## Displays the help for each target (this message)
-	@echo 
-	@echo Makefile targets
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
-	@echo 
+## The name of the user in GitHub
+github_user   := retgits
 
-#--- Linting targets ---
-fmt: ## Fmt runs the commands 'gofmt -l -w' and 'gofmt -s -w' and prints the names of the files that are modified.
-	env GO111MODULE=on go fmt ./...
-	env GO111MODULE=on gofmt -s -w .
+## The name of the project, defaults to the name of the current directory
+project_name  := $(notdir $(CURDIR))
 
-vet: ## Vet examines Go source code and reports suspicious constructs.
-	env GO111MODULE=on go vet ./...
+## The version of the project, either uses the current commit hash, or will default to "dev"
+version       := $(strip $(if $(shell git describe --tags --always --dirty="-dev"),$(shell git describe --tags --always --dirty="-dev"),dev))
 
-lint: ## Lint examines Go source code and prints style mistakes for all packages.
-	env GO111MODULE=on golint -set_exit_status $(ALL_PACKAGES)
+## The current date in UTC
+date          := $(shell date -u '+%Y-%m-%d-%H:%M UTC')
 
-#--- Setup targets ---
-setup: ## Make preparations to be able to run tests.
-	mkdir -p ${TESTDIR}
-	mkdir -p $(GOPATH)/bin
-	go get -u golang.org/x/lint/golint
-	go get -u github.com/gojp/goreportcard/cmd/goreportcard-cli
+## The Amazon S3 bucket to upload files to
+aws_bucket    ?= $$AWSBUCKET
 
-deps: ## Get all the Go dependencies.
-	go get -u ./...
+## Version flags for Go builds
+version_flags := -ldflags='-X "github.com/$(github_user)/$(project_name)/main.Version=$(version)" -X "github.com/$(github_user)/$(project_name)/main.BuildTime=$(date)"'
 
-#--- Test targets ---
-.PHONY: test
-test: ## Run all testcases.
-	env TESTDIR=${TESTDIR} go test -race ./...
+# Suppress checking files and all Make output
+.PHONY: help deps test build clean local deploy stage
+.SILENT: help deps test build clean local deploy stage
 
-test-cover-html: ## Run all test cases and generate a coverage report.
-	@echo "mode: count" > coverage-all.out
+# Targets
+help: ## Displays the help for each target (this message).
+	echo
+	echo Usage: make [TARGET]
+	echo
+	echo Makefile targets
+	grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+	echo
 
-	$(foreach pkg, $(PACKAGES),\
-	env TESTDIR=${TESTDIR} go test -coverprofile=coverage.out -covermode=count $(pkg);\
-	tail -n +2 coverage.out >> coverage-all.out;)
-	go tool cover -html=coverage-all.out -o out/coverage.html
+deps: ## Get the Go modules from the GOPROXY
+	echo
+	echo Getting Go modules from: $(shell go env GOPROXY)
+	go get ./...
+	echo
 
-score: ## Get a score based on GoReportcard.
-	goreportcard-cli -v
+test: ## Run all unit tests and print coverage
+	echo
+	go test -cover ./...
+	echo
 
-#--- Build targets ---
-compile-lin: ## Compiles and creates a Linux executable in the 'out' folder.
-	mkdir -p out/
-	env GO111MODULE=on GOOS=linux CGO_ENABLED=0 go build -v -a -installsuffix cgo -o out/${PROJECT}-linux *.go
+build: ## Build the executable for Lambda
+	echo
+	GOOS=linux GOARCH=amd64 go build -o bin/$(project_name) $(if $V,-v) $(version_flags)
+	echo
 
-compile-win: ## Compiles and creates a Windows executable in the 'out' folder.
-	mkdir -p out/
-	env GO111MODULE=on GOOS=windows CGO_ENABLED=0 go build -v -a -installsuffix cgo -o out/${PROJECT}.exe *.go
+clean: ## Remove all generated files
+	echo
+	-rm -rf bin
+	-rm temp-template.yaml
+	echo
 
-compile-mac: ## Compiles and creates a MacOS executable in the 'out' folder.
-	mkdir -p out/
-	env GO111MODULE=on GOOS=darwin CGO_ENABLED=0 go build -v -a -installsuffix cgo -o out/${PROJECT}-macos *.go
+local: ## Run SAM to test the Lambda function using Docker
+	echo
+	sam local invoke WeeklyReviewFunction -e ./test/event.json
+	echo
 
-compile: compile-lin compile-win compile-mac ## Compiles and creates all executables in the 'out' folder.
+preparetemplate:
+	rm -f temp-template.yaml
+	cp template.yaml temp-template.yaml
+	sed -i 's/version: xxx/version: $(version)/g' temp-template.yaml
 
-install: ## Compiles and installs the packages named by the import paths.
-	go install
+deploy: clean build preparetemplate ## Deploy the app to AWS Lambda
+	echo
+	sam package --output-template-file packaged.yaml --s3-bucket $(aws_bucket)
+	sam deploy --template-file packaged.yaml --stack-name $(project_name)-$(stage) --capabilities CAPABILITY_IAM
+	aws cloudformation describe-stacks --stack-name $(project_name)-$(stage) --query 'Stacks[].Outputs'
+	echo

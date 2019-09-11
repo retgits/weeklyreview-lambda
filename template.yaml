@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  weeklyreview-lambda
+  
+  SAM Template for weeklyreview-lambda
+Globals:
+  Function:
+    Timeout: 5
+
+Parameters:
+  TrelloAppKey:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/trello/key'
+  TrelloAppToken:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/trello/token'
+  TrelloMemberName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/trello/user'
+  TrelloBoard:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/trello/board'
+  TrelloList:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/trello/list'
+  SlackWebhookURL:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/slack/url'
+  SlackChannel:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/slack/channel'
+  SlackUser:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/slack/user'
+  SlackEmoji:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: '/prod/slack/emoji'
+
+Resources:
+  WeeklyReviewFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: bin/
+      Handler: weekly-review
+      Runtime: go1.x
+      Events:
+        WeeklyReviewSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 23 ? * FRI *) ## Runs at 11 pm UTC (4pm PST)
+      Policies:
+        - AWSLambdaRole
+      Environment:
+        Variables:
+          AWS_REGION: "us-west-2"
+          SLACK_CHANNEL: !Ref SlackChannel
+          SLACK_EMOJI: !Ref SlackEmoji
+          SLACK_USER: !Ref SlackUser
+          TRELLO_BOARD: !Ref TrelloBoard
+          TRELLO_LIST: !Ref TrelloList
+          TRELLO_APP_KEY: !Ref TrelloAppKey
+          TRELLO_APP_TOKEN: !Ref TrelloAppToken
+          TRELLO_MEMBER_NAME: !Ref TrelloMemberName
+          SLACK_WEBHOOK_URL: !Ref SlackWebhookURL
+          #TRELLO_APP_KEY: "" ## Uncomment this and add a base64 encoded variable when testing locally
+          #TRELLO_APP_TOKEN: "" ## Uncomment this and add a base64 encoded variable when testing locally
+          #TRELLO_MEMBER_NAME: "" ## Uncomment this and add a base64 encoded variable when testing locally
+          #SLACK_WEBHOOK_URL: "" ## Uncomment this and add a base64 encoded variable when testing locally
+      Tags:
+        version: xxx
+      Description: "weeklyreview-lambda sends all Trello tickets that are done that week to a Slack channel"
+      MemorySize: 128
